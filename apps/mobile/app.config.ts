@@ -2,16 +2,6 @@ import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { type ConfigContext, type ExpoConfig } from 'expo/config'
 import { withBuildProperties } from 'expo-build-properties'
-import font from 'expo-font/plugin'
-import imagePicker from 'expo-image-picker/plugin'
-import localization from 'expo-localization/plugin'
-import mediaLibrary from 'expo-media-library/plugin'
-import router from 'expo-router/plugin'
-import screenOrientation from 'expo-screen-orientation/plugin'
-import secureStore from 'expo-secure-store/plugin'
-import splashScreen from 'expo-splash-screen/plugin'
-import sqlite from 'expo-sqlite/plugin'
-import webBrowser from 'expo-web-browser/plugin'
 
 export default function getConfig(context: ConfigContext): ExpoConfig {
   const name = 'Acorn'
@@ -20,45 +10,60 @@ export default function getConfig(context: ConfigContext): ExpoConfig {
   const plugins: ExpoConfig['plugins'] = [
     '@bacons/apple-targets',
     'expo-iap',
-    router(),
-    localization(),
-    secureStore(),
-    sqlite(),
-    webBrowser(),
-    splashScreen({
-      backgroundColor: '#fbfdfc',
-      dark: {
-        backgroundColor: '#101211',
+    'expo-router',
+    'expo-localization',
+    'expo-secure-store',
+    'expo-sqlite',
+    'expo-web-browser',
+    [
+      'expo-splash-screen',
+      {
+        backgroundColor: '#fbfdfc',
+        dark: {
+          backgroundColor: '#101211',
+        },
+        image: './assets/icons/splash.png',
+        imageWidth: 200,
       },
-      image: './assets/icons/splash.png',
-      imageWidth: 200,
-    }),
-    font({
-      fonts: [
-        './assets/fonts/apercu-italic.ttf',
-        './assets/fonts/apercu-upright.ttf',
-        './assets/fonts/basis-italic.ttf',
-        './assets/fonts/basis-upright.ttf',
-        './assets/fonts/fold-italic.ttf',
-        './assets/fonts/fold-upright.ttf',
-        './assets/fonts/inter-italic.ttf',
-        './assets/fonts/inter-upright.ttf',
-        './assets/fonts/mono-regular.otf',
-        './assets/fonts/mono-medium.otf',
-        './assets/fonts/mono-bold.otf',
-        './assets/fonts/redacted.ttf',
-      ],
-    }),
-    mediaLibrary({
-      photosPermission: `Allow ${name} to access your photo library.`,
-      savePhotosPermission: `Allow ${name} to save photos to your library.`,
-    }),
-    imagePicker({
-      photosPermission: `Allow ${name} to access your photo library`,
-    }),
-    screenOrientation({
-      initialOrientation: 'PORTRAIT_UP',
-    }),
+    ],
+    [
+      'expo-font',
+      {
+        fonts: [
+          './assets/fonts/apercu-italic.ttf',
+          './assets/fonts/apercu-upright.ttf',
+          './assets/fonts/basis-italic.ttf',
+          './assets/fonts/basis-upright.ttf',
+          './assets/fonts/fold-italic.ttf',
+          './assets/fonts/fold-upright.ttf',
+          './assets/fonts/inter-italic.ttf',
+          './assets/fonts/inter-upright.ttf',
+          './assets/fonts/mono-regular.otf',
+          './assets/fonts/mono-medium.otf',
+          './assets/fonts/mono-bold.otf',
+          './assets/fonts/redacted.ttf',
+        ],
+      },
+    ],
+    [
+      'expo-media-library',
+      {
+        photosPermission: `Allow ${name} to access your photo library.`,
+        savePhotosPermission: `Allow ${name} to save photos to your library.`,
+      },
+    ],
+    [
+      'expo-image-picker',
+      {
+        photosPermission: `Allow ${name} to access your photo library`,
+      },
+    ],
+    [
+      'expo-screen-orientation',
+      {
+        initialOrientation: 'PORTRAIT_UP',
+      },
+    ],
     [
       'react-native-nano-icons',
       {
