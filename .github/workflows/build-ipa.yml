@@ -43,6 +43,8 @@ jobs:
           node-version: 22
           registry-url: 'https://npm.pkg.github.com'
           scope: '@alizahid'
+          always-auth: true
+          token: ${{ secrets.NPM_TOKEN || github.token }}
 
       - name: Select Xcode Version
         run: |
@@ -52,8 +54,8 @@ jobs:
       - name: Install dependencies
         env:
           HUSKY: 0
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN || secrets.GITHUB_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN || secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN || github.token }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN || github.token }}
         run: |
           bun install --frozen-lockfile
 
