@@ -70,6 +70,35 @@ jobs:
           cd apps/mobile
           bunx expo prebuild --platform ios --clean --no-install
 
+      - name: Patch Podfile for Xcode 16 compatibility
+        run: |
+          python3 -c "
+          path = 'apps/mobile/ios/Podfile'
+          with open(path, 'r') as f:
+              content = f.read()
+
+          hook = '''
+              installer.pods_project.targets.each do |target|
+                target.build_configurations.each do |config|
+                  config.build_settings['SWIFT_VERSION'] = '5.0'
+                  config.build_settings['SWIFT_STRICT_CONCURRENCY'] = 'minimal'
+                  config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
+                  config.build_settings['GCC_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
+                  config.build_settings['SWIFT_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
+                end
+              end
+          '''
+
+          if 'post_install do |installer|' in content:
+              content = content.replace('post_install do |installer|', 'post_install do |installer|\n' + hook, 1)
+          else:
+              content += f'\npost_install do |installer|\n{hook}\nend\n'
+
+          with open(path, 'w') as f:
+              f.write(content)
+          print('Successfully patched Podfile with Swift 5 and Xcode 16 compatibility settings.')
+          "
+
       - name: Install CocoaPods
         run: |
           cd apps/mobile/ios
@@ -89,6 +118,7 @@ jobs:
           fi
           echo "Building scheme: $SCHEME"
 
+          set -o pipefail
           xcodebuild \
             -workspace Acorn.xcworkspace \
             -scheme "$SCHEME" \
@@ -101,7 +131,14 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             CODE_SIGN_ENTITLEMENTS="" \
             COMPILER_INDEX_STORE_ENABLE=NO \
-            archive
+            archive 2>&1 | tee xcodebuild.log || {
+              EXIT_CODE=$?
+              echo "============================================="
+              echo "::error::Xcode archive failed! Error summary:"
+              echo "============================================="
+              grep -E "(error: |fatal error: )" xcodebuild.log | tail -n 50 || tail -n 100 xcodebuild.log
+              exit $EXIT_CODE
+            }
 
       - name: Package IPA
         id: package
