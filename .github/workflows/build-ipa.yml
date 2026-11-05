@@ -1,0 +1,168 @@
+name: Build iOS IPA for LiveContainer
+
+on:
+  workflow_dispatch:
+    inputs:
+      strip_safari_extension:
+        description: 'Strip Safari Web Extension from IPA (recommended for LiveContainer)'
+        type: boolean
+        default: true
+      create_release:
+        description: 'Publish as a GitHub Release'
+        type: boolean
+        default: false
+      release_tag:
+        description: 'Release tag (if publishing release, e.g. v1.0.0)'
+        type: string
+        default: ''
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-ipa:
+    name: Build Acorn IPA
+    runs-on: macos-14
+    timeout-minutes: 60
+    permissions:
+      contents: write
+      packages: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@alizahid'
+
+      - name: Select Xcode Version
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.app || sudo xcode-select -s /Applications/Xcode_16.1.app || sudo xcode-select -s /Applications/Xcode_16.2.app || true
+          xcodebuild -version
+
+      - name: Install dependencies
+        env:
+          HUSKY: 0
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN || secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          bun install --frozen-lockfile
+
+      - name: Setup environment files
+        run: |
+          cd apps/mobile
+          touch .env.local
+          touch .env.production.local
+
+      - name: Prebuild native iOS project
+        run: |
+          cd apps/mobile
+          bunx expo prebuild --platform ios --clean --no-install
+
+      - name: Install CocoaPods
+        run: |
+          cd apps/mobile/ios
+          pod install --repo-update
+
+      - name: Build and Archive (Unsigned for Device)
+        run: |
+          cd apps/mobile/ios
+          
+          # Detect scheme name or fallback to Acorn
+          SCHEME="Acorn"
+          if xcodebuild -workspace Acorn.xcworkspace -list >/dev/null 2>&1; then
+            DETECTED_SCHEME=$(xcodebuild -workspace Acorn.xcworkspace -list -json 2>/dev/null | python3 -c "import sys, json; data=json.load(sys.stdin); schemes=data.get('workspace', {}).get('schemes', []); print(schemes[0] if schemes else 'Acorn')")
+            if [ -n "$DETECTED_SCHEME" ]; then
+              SCHEME="$DETECTED_SCHEME"
+            fi
+          fi
+          echo "Building scheme: $SCHEME"
+
+          xcodebuild \
+            -workspace Acorn.xcworkspace \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$PWD/build/Acorn.xcarchive" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGN_ENTITLEMENTS="" \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            archive
+
+      - name: Package IPA
+        id: package
+        run: |
+          ARCHIVE_DIR="apps/mobile/ios/build/Acorn.xcarchive"
+          APP_PATH=$(find "$ARCHIVE_DIR/Products/Applications" -maxdepth 1 -name "*.app" | head -n 1)
+          
+          if [ -z "$APP_PATH" ]; then
+            echo "::error::Acorn.app not found in archive directory $ARCHIVE_DIR"
+            exit 1
+          fi
+          echo "Found app bundle: $APP_PATH"
+
+          # Optionally strip Safari extension if requested (LiveContainer doesn't support guest extensions)
+          if [ "${{ github.event.inputs.strip_safari_extension }}" != "false" ]; then
+            if [ -d "$APP_PATH/PlugIns" ]; then
+              echo "Removing PlugIns/ directory for LiveContainer compatibility..."
+              rm -rf "$APP_PATH/PlugIns"
+            fi
+          fi
+
+          # Apply ad-hoc code signature to frameworks, dylibs, and the main executable
+          echo "Applying ad-hoc code signatures..."
+          find "$APP_PATH/Frameworks" -type f \( -name "*.dylib" -o -perm +111 \) -exec codesign --force --sign - {} + 2>/dev/null || true
+          find "$APP_PATH/Frameworks" -type d -name "*.framework" -exec codesign --force --sign - {} + 2>/dev/null || true
+          if [ -d "$APP_PATH/PlugIns" ]; then
+            find "$APP_PATH/PlugIns" -type d -name "*.appex" -exec codesign --force --sign - {} + 2>/dev/null || true
+          fi
+          codesign --force --deep --sign - "$APP_PATH"
+
+          # Verify signature
+          codesign -vvv "$APP_PATH" || true
+
+          # Create IPA package
+          mkdir -p build_ipa/Payload
+          cp -R "$APP_PATH" build_ipa/Payload/
+          cd build_ipa
+          zip -r -y ../Acorn.ipa Payload
+          cd ..
+          rm -rf build_ipa
+
+          IPA_SIZE=$(ls -lh Acorn.ipa | awk '{print $5}')
+          echo "Generated Acorn.ipa ($IPA_SIZE)"
+          echo "ipa_size=$IPA_SIZE" >> $GITHUB_OUTPUT
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Acorn-LiveContainer-IPA
+          path: Acorn.ipa
+          retention-days: 14
+
+      - name: Create GitHub Release
+        if: ${{ (github.event.inputs.create_release == 'true' && github.event.inputs.release_tag != '') || startsWith(github.ref, 'refs/tags/v') }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.release_tag || github.ref_name }}
+          name: Acorn ${{ github.event.inputs.release_tag || github.ref_name }}
+          files: Acorn.ipa
+          draft: false
+          prerelease: false
+          body: |
+            ### Acorn iOS Build for LiveContainer
+            - Ready for sideloading with [LiveContainer](https://github.com/khanhduytran0/LiveContainer)
+            - Target Architecture: `iphoneos` ARM64 (Physical iOS Device)
+            - Code Signing: Ad-Hoc (`codesign -s -`)

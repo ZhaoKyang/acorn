@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs'
+import path from 'node:path'
 import { type ConfigContext, type ExpoConfig } from 'expo/config'
 import { withBuildProperties } from 'expo-build-properties'
 import font from 'expo-font/plugin'
@@ -129,12 +131,21 @@ export default function getConfig(context: ConfigContext): ExpoConfig {
     version: '1.0.0',
   } satisfies ExpoConfig
 
+  const localPodspec = path.resolve(
+    import.meta.dirname,
+    '../web/public/ffmpeg-kit-ios-full-gpl.podspec',
+  )
+  const podspec = existsSync(localPodspec)
+    ? localPodspec
+    : (process.env.PODSPEC_URL ||
+      'https://raw.githubusercontent.com/alizahid/acorn/main/apps/web/public/ffmpeg-kit-ios-full-gpl.podspec')
+
   return withBuildProperties(config, {
     ios: {
       extraPods: [
         {
           name: 'ffmpeg-kit-ios-full-gpl',
-          podspec: 'https://acorn.blue/ffmpeg-kit-ios-full-gpl.podspec',
+          podspec,
         },
       ],
     },
