@@ -104,6 +104,42 @@ jobs:
           cd apps/mobile/ios
           pod install --repo-update
 
+      - name: Patch openiap for Xcode 16.1 (iOS 18.1 SDK) compatibility
+        run: |
+          python3 -c "
+          import glob, re
+          pattern = 'apps/mobile/ios/Pods/openiap/**/OpenIapError.swift'
+          files = glob.glob(pattern, recursive=True)
+          if not files:
+              print('Warning: OpenIapError.swift not found with pattern:', pattern)
+          for path in files:
+              print('Patching:', path)
+              with open(path, 'r') as f:
+                  content = f.read()
+              
+              old_code = '''            case .unsupported:
+                mappedCode = .featureNotSupported'''
+              new_code = '''            #if compiler(>=6.4)
+            case .unsupported:
+                mappedCode = .featureNotSupported
+            #endif'''
+              
+              if old_code in content:
+                  content = content.replace(old_code, new_code)
+                  with open(path, 'w') as f:
+                      f.write(content)
+                  print('Successfully patched case .unsupported in', path)
+              else:
+                  content = re.sub(
+                      r'(case\s+\.unsupported:\s*\n\s*mappedCode\s*=\s*\.featureNotSupported)',
+                      r'#if compiler(>=6.4)\n            \1\n            #endif',
+                      content
+                  )
+                  with open(path, 'w') as f:
+                      f.write(content)
+                  print('Applied regex patch to', path)
+          "
+
       - name: Build and Archive (Unsigned for Device)
         run: |
           cd apps/mobile/ios
