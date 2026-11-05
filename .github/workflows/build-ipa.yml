@@ -65,6 +65,40 @@ jobs:
           touch .env.local
           touch .env.production.local
 
+      - name: Patch expo-modules-jsi for Xcode 16 compatibility
+        run: |
+          python3 -c "
+          import glob, os, re
+          # Find all Package.swift in expo-modules-jsi
+          pkg_files = glob.glob('**/node_modules/expo-modules-jsi/**/Package.swift', recursive=True)
+          for p in pkg_files:
+              print('Patching Package.swift:', p)
+              os.chmod(p, 0o666)
+              with open(p, 'r') as f:
+                  content = f.read()
+              # Downgrade swift-tools-version 6.2 to 6.0 for Xcode 16.1
+              content = re.sub(r'// swift-tools-version:\s*6\.\d+', '// swift-tools-version: 6.0', content)
+              # Comment out upcoming features introduced in Swift 6.2
+              content = re.sub(r'(\.enableUpcomingFeature\(\"(?:NonisolatedNonsendingByDefault|InferIsolatedConformances)\"\),?)', r'// \1', content)
+              with open(p, 'w') as f:
+                  f.write(content)
+              print('Patched Package.swift')
+
+          # Find all build-xcframework.sh in expo-modules-jsi
+          sh_files = glob.glob('**/node_modules/expo-modules-jsi/**/build-xcframework.sh', recursive=True)
+          for s in sh_files:
+              print('Patching build-xcframework.sh:', s)
+              os.chmod(s, 0o777)
+              with open(s, 'r') as f:
+                  content = f.read()
+              # Remove -disableAutomaticPackageResolution which causes 'Could not resolve package dependencies'
+              content = content.replace('-disableAutomaticPackageResolution \\\n', '')
+              content = content.replace('-disableAutomaticPackageResolution', '')
+              with open(s, 'w') as f:
+                  f.write(content)
+              print('Patched build-xcframework.sh')
+          "
+
       - name: Prebuild native iOS project
         run: |
           cd apps/mobile
@@ -174,7 +208,7 @@ jobs:
               echo "============================================="
               echo "::error::Xcode archive failed! Error summary:"
               echo "============================================="
-              grep -E "(error: |fatal error: )" xcodebuild.log | tail -n 50 || tail -n 100 xcodebuild.log
+              grep -E -C 3 "(error: |fatal error: )" xcodebuild.log | tail -n 80 || tail -n 100 xcodebuild.log
               exit $EXIT_CODE
             }
 
