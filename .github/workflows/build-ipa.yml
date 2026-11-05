@@ -24,6 +24,9 @@ jobs:
     name: Build Acorn IPA
     runs-on: macos-14
     timeout-minutes: 60
+    permissions:
+      contents: write
+      packages: read
 
     steps:
       - name: Checkout repository
@@ -38,6 +41,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@alizahid'
 
       - name: Select Xcode Version
         run: |
@@ -47,6 +52,8 @@ jobs:
       - name: Install dependencies
         env:
           HUSKY: 0
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN || secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           bun install --frozen-lockfile
 
