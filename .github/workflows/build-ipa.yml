@@ -106,14 +106,16 @@ jobs:
 
       - name: Patch openiap for Xcode 16.1 (iOS 18.1 SDK) compatibility
         run: |
+          chmod -R u+w apps/mobile/ios/Pods
           python3 -c "
-          import glob, re
+          import glob, os, re
           pattern = 'apps/mobile/ios/Pods/openiap/**/OpenIapError.swift'
           files = glob.glob(pattern, recursive=True)
           if not files:
               print('Warning: OpenIapError.swift not found with pattern:', pattern)
           for path in files:
               print('Patching:', path)
+              os.chmod(path, 0o666)
               with open(path, 'r') as f:
                   content = f.read()
               
