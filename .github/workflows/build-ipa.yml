@@ -33,9 +33,28 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Bun
+        id: setup_bun
+        continue-on-error: true
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.3
+
+      - name: Fallback Bun install
+        if: ${{ steps.setup_bun.outcome == 'failure' }}
+        run: |
+          echo "setup-bun failed, installing Bun via install script..."
+          for attempt in 1 2 3; do
+            if curl -fsSL https://bun.sh/install | bash; then
+              break
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "::error::Failed to install Bun after 3 attempts"
+              exit 1
+            fi
+            sleep $((attempt * 5))
+          done
+          echo "$HOME/.bun/bin" >> "$GITHUB_PATH"
+          "$HOME/.bun/bin/bun" --version
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
