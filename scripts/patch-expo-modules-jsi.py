@@ -322,6 +322,93 @@ private func makePreferredStrategy(_ preferredStrategy: String) -> TranslationSe
                 count['swift'] += 1
                 print('Patched TranslationHelpers.swift:', p)
 
+        # 15. RouterToolbarHostView.swift (expo-router)
+        elif f == 'RouterToolbarHostView.swift':
+            with open(p, 'r') as fp:
+                c = fp.read()
+            new_c = re.sub(
+                r'if #available\(iOS 26\.0, \*\) \{\s*if let hidesSharedBackground = menu\.hidesSharedBackground \{.*?\}\s*\}',
+                '',
+                c,
+                flags=re.DOTALL
+            )
+            if new_c != c:
+                os.chmod(p, 0o666)
+                with open(p, 'w') as fp:
+                    fp.write(new_c)
+                count['swift'] += 1
+                print('Patched RouterToolbarHostView.swift:', p)
+
+        # 16. RouterToolbarItemView.swift (expo-router)
+        elif f == 'RouterToolbarItemView.swift':
+            with open(p, 'r') as fp:
+                c = fp.read()
+            old_search = '''    } else if type == .searchBar {
+      guard #available(iOS 26.0, *), let controller = self.host?.findViewController() else {
+        // Check for iOS 26, should already be guarded by the JS side, so this warning will only fire if controller is nil
+        logger?.warn(
+          "[expo-router] navigationItem.searchBarPlacementBarButtonItem not available. This is most likely a bug in expo-router."
+        )
+        currentBarButtonItem = nil
+        return
+      }
+      guard let navController = controller.navigationController else {
+        currentBarButtonItem = nil
+        return
+      }
+      guard navController.isNavigationBarHidden == false else {
+        logger?.warn(
+          "[expo-router] Toolbar.SearchBarPreferredSlot should only be used when stack header is shown."
+        )
+        currentBarButtonItem = nil
+        return
+      }
+
+      item = controller.navigationItem.searchBarPlacementBarButtonItem'''
+
+            new_search = '''    } else if type == .searchBar {
+      currentBarButtonItem = nil
+      return'''
+
+            new_c = c.replace(old_search, new_search) if old_search in c else c
+            new_c = re.sub(
+                r'if #available\(iOS 26\.0, \*\) \{\s*item\.hidesSharedBackground = hidesSharedBackground\s*item\.sharesBackground = sharesBackground\s*\}',
+                '',
+                new_c
+            )
+            new_c = re.sub(
+                r'if #available\(iOS 26\.0, \*\) \{\s*if let badgeConfig = badgeConfiguration \{.*?\}\s*else\s*\{\s*item\.badge = nil\s*\}\s*\}',
+                '',
+                new_c,
+                flags=re.DOTALL
+            )
+            if new_c != c:
+                os.chmod(p, 0o666)
+                with open(p, 'w') as fp:
+                    fp.write(new_c)
+                count['swift'] += 1
+                print('Patched RouterToolbarItemView.swift:', p)
+
+        # 17. RouterToolbarModule.swift (expo-router)
+        elif f == 'RouterToolbarModule.swift':
+            with open(p, 'r') as fp:
+                c = fp.read()
+            old_prominent = '''    case .prominent:
+      if #available(iOS 26.0, *) {
+        return .prominent
+      } else {
+        return .done
+      }'''
+            new_prominent = '''    case .prominent:
+      return .done'''
+            if old_prominent in c:
+                new_c = c.replace(old_prominent, new_prominent)
+                os.chmod(p, 0o666)
+                with open(p, 'w') as fp:
+                    fp.write(new_c)
+                count['swift'] += 1
+                print('Patched RouterToolbarModule.swift:', p)
+
     except Exception as e:
         print('Error patching', p, e)
 
@@ -335,7 +422,9 @@ def patch_expo_modules_jsi(search_root):
         'JavaScriptRuntime.swift', 'RetainedSwiftPointer.h',
         'HostFunctionClosure.h', 'HostObjectCallbacks.h',
         'PlaybackCoordinator.swift', 'GalleryToolbar.swift',
-        'GalleryViewController.swift', 'TranslationHelpers.swift'
+        'GalleryViewController.swift', 'TranslationHelpers.swift',
+        'RouterToolbarHostView.swift', 'RouterToolbarItemView.swift',
+        'RouterToolbarModule.swift'
     }
 
     for root, dirs, files in os.walk(search_root, followlinks=True):
