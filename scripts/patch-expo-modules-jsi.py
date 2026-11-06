@@ -224,11 +224,71 @@ inline void appendPropNameId(HostObjectCallbacks::PropNameIds &vector, facebook:
                 count['swift'] += 1
                 print('Patched GalleryViewController.swift:', p)
 
+        # 12. *.swiftinterface (ExpoModulesCore / Swift 6.1 compatibility)
+        elif f.endswith('.swiftinterface'):
+            with open(p, 'r', encoding='utf-8', errors='replace') as fp:
+                c = fp.read()
+            changed = False
+            if ': @_Concurrency.MainActor ' in c:
+                c = c.replace(': @_Concurrency.MainActor ', ': ')
+                changed = True
+            if '// swift-compiler-version: Apple Swift version 6.3' in c:
+                c = c.replace('// swift-compiler-version: Apple Swift version 6.3', '// swift-compiler-version: Apple Swift version 6.1')
+                changed = True
+            if changed:
+                os.chmod(p, 0o666)
+                with open(p, 'w', encoding='utf-8') as fp:
+                    fp.write(c)
+                count['swiftinterface'] = count.get('swiftinterface', 0) + 1
+                print('Patched swiftinterface:', p)
+
+        # 13. Expo tarballs (.tar.gz) containing xcframeworks
+        elif f.endswith('.tar.gz') and 'Expo' in f:
+            import tarfile, io
+            try:
+                with tarfile.open(p, 'r:gz') as tar:
+                    members = tar.getmembers()
+                    needs_patch = False
+                    for m in members:
+                        if m.name.endswith('.swiftinterface'):
+                            extracted = tar.extractfile(m)
+                            if extracted:
+                                text = extracted.read().decode('utf-8', errors='replace')
+                                if ': @_Concurrency.MainActor ' in text:
+                                    needs_patch = True
+                                    break
+                    if needs_patch:
+                        new_tar_io = io.BytesIO()
+                        with tarfile.open(fileobj=new_tar_io, mode='w:gz') as new_tar:
+                            for m in members:
+                                extracted = tar.extractfile(m)
+                                if extracted and m.name.endswith('.swiftinterface'):
+                                    text = extracted.read().decode('utf-8', errors='replace')
+                                    if ': @_Concurrency.MainActor ' in text:
+                                        text = text.replace(': @_Concurrency.MainActor ', ': ')
+                                        text = text.replace('// swift-compiler-version: Apple Swift version 6.3', '// swift-compiler-version: Apple Swift version 6.1')
+                                        data = text.encode('utf-8')
+                                        m.size = len(data)
+                                        new_tar.addfile(m, io.BytesIO(data))
+                                    else:
+                                        new_tar.addfile(m, io.BytesIO(text.encode('utf-8')))
+                                elif extracted:
+                                    new_tar.addfile(m, extracted)
+                                else:
+                                    new_tar.addfile(m)
+                        os.chmod(p, 0o666)
+                        with open(p, 'wb') as out_f:
+                            out_f.write(new_tar_io.getvalue())
+                        count['tar'] = count.get('tar', 0) + 1
+                        print('Patched in-tar swiftinterfaces in:', p)
+            except Exception as e:
+                print('Error patching tarball', p, e)
+
     except Exception as e:
         print('Error patching', p, e)
 
 def patch_expo_modules_jsi(search_root):
-    count = {'pkg': 0, 'sh': 0, 'swift': 0, 'h': 0}
+    count = {'pkg': 0, 'sh': 0, 'swift': 0, 'h': 0, 'swiftinterface': 0, 'tar': 0}
     if not os.path.exists(search_root):
         return count
 
@@ -242,7 +302,7 @@ def patch_expo_modules_jsi(search_root):
 
     for root, dirs, files in os.walk(search_root, followlinks=True):
         for f in files:
-            if f in target_files or f.endswith('.swift'):
+            if f in target_files or f.endswith('.swift') or f.endswith('.swiftinterface') or (f.endswith('.tar.gz') and 'Expo' in f):
                 p = os.path.join(root, f)
                 patch_file(p, f, count)
 
@@ -250,11 +310,11 @@ def patch_expo_modules_jsi(search_root):
 
 def main():
     search_dirs = sys.argv[1:] if len(sys.argv) > 1 else ['.', os.path.expanduser('~/.bun')]
-    total = {'pkg': 0, 'sh': 0, 'swift': 0, 'h': 0}
+    total = {'pkg': 0, 'sh': 0, 'swift': 0, 'h': 0, 'swiftinterface': 0, 'tar': 0}
     for d in search_dirs:
         res = patch_expo_modules_jsi(os.path.abspath(os.path.expanduser(d)))
         for k in total:
-            total[k] += res[k]
+            total[k] += res.get(k, 0)
     print(f'Done patching expo-modules-jsi: {total}')
 
 if __name__ == '__main__':
