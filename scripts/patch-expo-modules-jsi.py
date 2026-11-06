@@ -150,6 +150,20 @@ inline void appendPropNameId(HostObjectCallbacks::PropNameIds &vector, facebook:
                     count['h'] += 1
                     print('Patched HostObjectCallbacks.h:', p)
 
+        # 9. PlaybackCoordinator.swift (react-native-jet-video)
+        elif f == 'PlaybackCoordinator.swift':
+            with open(p, 'r') as fp:
+                c = fp.read()
+            old_code = 'if abs(track.fraction - fraction) > 0.01 {'
+            new_code = 'let diff: Double = abs(track.fraction - fraction)\n      if diff > 0.01 {'
+            if old_code in c:
+                new_c = c.replace(old_code, new_code)
+                os.chmod(p, 0o666)
+                with open(p, 'w') as fp:
+                    fp.write(new_c)
+                count['swift'] += 1
+                print('Patched PlaybackCoordinator.swift:', p)
+
     except Exception as e:
         print('Error patching', p, e)
 
@@ -161,7 +175,8 @@ def patch_expo_modules_jsi(search_root):
     target_files = {
         'Package.swift', 'build-xcframework.sh', 'Task+immediate.swift',
         'JavaScriptRuntime.swift', 'RetainedSwiftPointer.h',
-        'HostFunctionClosure.h', 'HostObjectCallbacks.h'
+        'HostFunctionClosure.h', 'HostObjectCallbacks.h',
+        'PlaybackCoordinator.swift'
     }
 
     for root, dirs, files in os.walk(search_root, followlinks=True):
