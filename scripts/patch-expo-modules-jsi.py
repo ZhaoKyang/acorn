@@ -57,7 +57,11 @@ def patch_file(p, f, count):
         elif f == 'JavaScriptRuntime.swift':
             with open(p, 'r') as fp:
                 c = fp.read()
-            new_c = c.replace('vector.push_back(consuming: propNameId)', 'vector.push_back(propNameId)')
+            new_c = re.sub(
+                r'for propertyName in propertyNames\s*\{\s*let propNameId = facebook\.jsi\.PropNameID\.forUtf8\(iRuntime,\s*std\.string\(propertyName\)\)\s*vector\.push_back\([^)]*\)\s*\}',
+                'for propertyName in propertyNames {\n        expo.appendPropNameId(&vector, iRuntime, std.string(propertyName))\n      }',
+                c
+            )
             new_c = new_c.replace(
                 'return expo.HostFunctionClosure(context, call, deallocate)',
                 'return expo.createHostFunctionClosure(context, call, deallocate)'
@@ -110,9 +114,9 @@ def patch_file(p, f, count):
             if 'createHostFunctionClosure' not in new_c:
                 factory_func = '''
 inline HostFunctionClosure *_Nonnull createHostFunctionClosure(
-    RetainedSwiftPointer::Context context,
-    HostFunctionClosure::Closure closure,
-    RetainedSwiftPointer::Deallocator deallocator) {
+    RetainedSwiftPointer::Context _Nonnull context,
+    HostFunctionClosure::Closure _Nonnull closure,
+    RetainedSwiftPointer::Deallocator _Nonnull deallocator) {
   return new HostFunctionClosure(context, closure, deallocator);
 }
 
@@ -126,6 +130,26 @@ inline HostFunctionClosure *_Nonnull createHostFunctionClosure(
                 count['h'] += 1
                 print('Patched HostFunctionClosure.h:', p)
 
+        # 8. HostObjectCallbacks.h
+        elif f == 'HostObjectCallbacks.h':
+            with open(p, 'r') as fp:
+                c = fp.read()
+            if 'appendPropNameId' not in c:
+                helper = '''
+inline void appendPropNameId(HostObjectCallbacks::PropNameIds &vector, facebook::jsi::IRuntime &runtime, const std::string &name) {
+  vector.push_back(facebook::jsi::PropNameID::forUtf8(runtime, name));
+}
+
+} // namespace expo
+'''
+                new_c = re.sub(r'\}\s*//\s*namespace\s*expo', helper, c)
+                if new_c != c:
+                    os.chmod(p, 0o666)
+                    with open(p, 'w') as fp:
+                        fp.write(new_c)
+                    count['h'] += 1
+                    print('Patched HostObjectCallbacks.h:', p)
+
     except Exception as e:
         print('Error patching', p, e)
 
@@ -134,9 +158,15 @@ def patch_expo_modules_jsi(search_root):
     if not os.path.exists(search_root):
         return count
 
+    target_files = {
+        'Package.swift', 'build-xcframework.sh', 'Task+immediate.swift',
+        'JavaScriptRuntime.swift', 'RetainedSwiftPointer.h',
+        'HostFunctionClosure.h', 'HostObjectCallbacks.h'
+    }
+
     for root, dirs, files in os.walk(search_root, followlinks=True):
         for f in files:
-            if f in ('Package.swift', 'build-xcframework.sh', 'Task+immediate.swift', 'JavaScriptRuntime.swift', 'RetainedSwiftPointer.h', 'HostFunctionClosure.h') or f.endswith('.swift'):
+            if f in target_files or f.endswith('.swift'):
                 p = os.path.join(root, f)
                 patch_file(p, f, count)
 
