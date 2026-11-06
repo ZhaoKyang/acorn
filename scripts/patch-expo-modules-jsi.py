@@ -154,10 +154,16 @@ inline void appendPropNameId(HostObjectCallbacks::PropNameIds &vector, facebook:
         elif f == 'PlaybackCoordinator.swift':
             with open(p, 'r') as fp:
                 c = fp.read()
-            old_code = 'if abs(track.fraction - fraction) > 0.01 {'
-            new_code = 'let diff: Double = abs(track.fraction - fraction)\n      if diff > 0.01 {'
-            if old_code in c:
-                new_c = c.replace(old_code, new_code)
+            old_patterns = [
+                'if abs(track.fraction - fraction) > 0.01 {',
+                'let diff: Double = abs(track.fraction - fraction)\n      if diff > 0.01 {'
+            ]
+            new_code = 'if Swift.abs(track.fraction - fraction) > 0.01 {'
+            new_c = c
+            for op in old_patterns:
+                if op in new_c:
+                    new_c = new_c.replace(op, new_code)
+            if new_c != c:
                 os.chmod(p, 0o666)
                 with open(p, 'w') as fp:
                     fp.write(new_c)
