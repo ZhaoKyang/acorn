@@ -48,8 +48,21 @@ jobs:
 
       - name: Select Xcode Version
         run: |
-          sudo xcode-select -s /Applications/Xcode_16.4.app || sudo xcode-select -s /Applications/Xcode_16.2.app || sudo xcode-select -s /Applications/Xcode_16.1.app || sudo xcode-select -s /Applications/Xcode_16.app || true
+          echo "=== Available Xcode versions ==="
+          ls -d /Applications/Xcode*.app || true
+          SELECTED=""
+          for xc in /Applications/Xcode_16.4*.app /Applications/Xcode_16.3*.app /Applications/Xcode_16.2*.app /Applications/Xcode_16.1*.app /Applications/Xcode_16*.app /Applications/Xcode.app; do
+            if [ -d "$xc" ]; then
+              SELECTED="$xc"
+              break
+            fi
+          done
+          if [ -n "$SELECTED" ]; then
+            echo "Selecting: $SELECTED"
+            sudo xcode-select -s "$SELECTED"
+          fi
           xcodebuild -version
+          swift -version
 
       - name: Install dependencies
         env:
@@ -67,72 +80,7 @@ jobs:
 
       - name: Patch expo-modules-jsi for Xcode 16 compatibility
         run: |
-          python3 -c "
-          import os, re
-          search_dirs = ['.', os.path.expanduser('~/.bun')]
-          found_pkg = 0
-          found_sh = 0
-          found_swift = 0
-
-          for base in search_dirs:
-              if not os.path.exists(base):
-                  continue
-              for root, dirs, files in os.walk(base, followlinks=True):
-                  if 'Package.swift' in files and 'expo-modules-jsi' in root:
-                      path = os.path.join(root, 'Package.swift')
-                      try:
-                          os.chmod(path, 0o666)
-                          with open(path, 'r') as f:
-                              content = f.read()
-                          if 'swift-tools-version' in content:
-                              content = re.sub(r'// swift-tools-version:\s*6\.\d+', '// swift-tools-version: 6.0', content)
-                              content = re.sub(r'(\.enableUpcomingFeature\(\"(?:NonisolatedNonsendingByDefault|InferIsolatedConformances)\"\),?)', r'// \1', content)
-                          content = content.replace('\"-Werror\", \"ImplicitStrongCapture\",', '')
-                          content = content.replace('\"-Werror\", \"ImplicitStrongCapture\"', '')
-                          with open(path, 'w') as f:
-                              f.write(content)
-                          found_pkg += 1
-                          print('Successfully patched Package.swift at:', path)
-                      except Exception as e:
-                          print('Error patching', path, e)
-
-                  if 'build-xcframework.sh' in files and 'expo-modules-jsi' in root:
-                      path = os.path.join(root, 'build-xcframework.sh')
-                      try:
-                          os.chmod(path, 0o777)
-                          with open(path, 'r') as f:
-                              content = f.read()
-                          if '-disableAutomaticPackageResolution' in content:
-                              content = content.replace('-disableAutomaticPackageResolution \\\n', '')
-                              content = content.replace('-disableAutomaticPackageResolution', '')
-                              with open(path, 'w') as f:
-                                  f.write(content)
-                              found_sh += 1
-                              print('Successfully patched build-xcframework.sh at:', path)
-                      except Exception as e:
-                          print('Error patching', path, e)
-
-                  if 'expo-modules-jsi' in root:
-                      for f in files:
-                          if f.endswith('.swift') and f != 'Package.swift':
-                              sf = os.path.join(root, f)
-                              try:
-                                  with open(sf, 'r') as fp:
-                                      sc = fp.read()
-                                  new_sc = re.sub(r'(?<!nonisolated\(unsafe\)\s)private weak (let|var)', 'nonisolated(unsafe) private weak var', sc)
-                                  new_sc = re.sub(r'(?<!nonisolated\(unsafe\)\s)internal weak (let|var)', 'nonisolated(unsafe) internal weak var', new_sc)
-                                  if new_sc != sc:
-                                      os.chmod(sf, 0o666)
-                                      with open(sf, 'w') as fp:
-                                          fp.write(new_sc)
-                                      found_swift += 1
-                                      print('Successfully patched weak property in:', sf)
-                              except Exception as e:
-                                  print('Error patching swift file', sf, e)
-
-          print(f'Finished patching. Total Package.swift: {found_pkg}, Total build-xcframework.sh: {found_sh}, Total swift fixes: {found_swift}')
-          assert found_pkg > 0, 'CRITICAL: No expo-modules-jsi Package.swift found to patch!'
-          "
+          python3 scripts/patch-expo-modules-jsi.py . ~/.bun
 
       - name: Prebuild native iOS project
         run: |
@@ -214,61 +162,7 @@ jobs:
       - name: Patch all Package.swift and build-xcframework scripts (post pod-install)
         run: |
           chmod -R u+w apps/mobile/ios/Pods || true
-          python3 -c "
-          import os, re
-          count_pkg = 0
-          count_sh = 0
-          count_swift = 0
-          for root, dirs, files in os.walk('/Users/runner/work/acorn', followlinks=True):
-              for f in files:
-                  p = os.path.join(root, f)
-                  if f == 'Package.swift':
-                      try:
-                          os.chmod(p, 0o666)
-                          with open(p, 'r') as fp:
-                              c = fp.read()
-                          new_c = c
-                          if 'swift-tools-version' in new_c:
-                              new_c = re.sub(r'// swift-tools-version:\s*6\.\d+', '// swift-tools-version: 6.0', new_c)
-                              new_c = re.sub(r'(\.enableUpcomingFeature\(\"(?:NonisolatedNonsendingByDefault|InferIsolatedConformances)\"\),?)', r'// \1', new_c)
-                          new_c = new_c.replace('\"-Werror\", \"ImplicitStrongCapture\",', '')
-                          new_c = new_c.replace('\"-Werror\", \"ImplicitStrongCapture\"', '')
-                          if new_c != c:
-                              with open(p, 'w') as fp:
-                                  fp.write(new_c)
-                              count_pkg += 1
-                              print('Successfully patched Package.swift:', p)
-                      except Exception as e:
-                          print('Error patching', p, e)
-                  elif f == 'build-xcframework.sh':
-                      try:
-                          os.chmod(p, 0o777)
-                          with open(p, 'r') as fp:
-                              c = fp.read()
-                          if '-disableAutomaticPackageResolution' in c:
-                              new_c = c.replace('-disableAutomaticPackageResolution \\\n', '').replace('-disableAutomaticPackageResolution', '')
-                              with open(p, 'w') as fp:
-                                  fp.write(new_c)
-                              count_sh += 1
-                              print('Successfully patched build-xcframework.sh:', p)
-                      except Exception as e:
-                          print('Error patching', p, e)
-                  elif f.endswith('.swift') and 'expo-modules-jsi' in root:
-                      try:
-                          with open(p, 'r') as fp:
-                              sc = fp.read()
-                          new_sc = re.sub(r'(?<!nonisolated\(unsafe\)\s)private weak (let|var)', 'nonisolated(unsafe) private weak var', sc)
-                          new_sc = re.sub(r'(?<!nonisolated\(unsafe\)\s)internal weak (let|var)', 'nonisolated(unsafe) internal weak var', new_sc)
-                          if new_sc != sc:
-                              os.chmod(p, 0o666)
-                              with open(p, 'w') as fp:
-                                  fp.write(new_sc)
-                              count_swift += 1
-                              print('Successfully patched weak property in:', p)
-                      except Exception as e:
-                          print('Error patching swift file', p, e)
-          print(f'Done post-pod patching. Patched {count_pkg} Package.swift, {count_sh} build-xcframework.sh, {count_swift} swift files.')
-          "
+          python3 scripts/patch-expo-modules-jsi.py /Users/runner/work/acorn ~/.bun
           echo "=== Verified all Package.swift swift-tools-versions ==="
           find /Users/runner/work/acorn -name "Package.swift" -exec head -n 1 {} +
 
