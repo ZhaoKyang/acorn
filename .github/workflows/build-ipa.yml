@@ -119,13 +119,14 @@ jobs:
                               try:
                                   with open(sf, 'r') as fp:
                                       sc = fp.read()
-                                  if 'weak let ' in sc:
+                                  new_sc = re.sub(r'(?<!nonisolated\(unsafe\)\s)private weak (let|var)', 'nonisolated(unsafe) private weak var', sc)
+                                  new_sc = re.sub(r'(?<!nonisolated\(unsafe\)\s)internal weak (let|var)', 'nonisolated(unsafe) internal weak var', new_sc)
+                                  if new_sc != sc:
                                       os.chmod(sf, 0o666)
-                                      sc = sc.replace('weak let ', 'weak var ')
                                       with open(sf, 'w') as fp:
-                                          fp.write(sc)
+                                          fp.write(new_sc)
                                       found_swift += 1
-                                      print('Successfully patched weak let in:', sf)
+                                      print('Successfully patched weak property in:', sf)
                               except Exception as e:
                                   print('Error patching swift file', sf, e)
 
@@ -256,13 +257,14 @@ jobs:
                       try:
                           with open(p, 'r') as fp:
                               sc = fp.read()
-                          if 'weak let ' in sc:
+                          new_sc = re.sub(r'(?<!nonisolated\(unsafe\)\s)private weak (let|var)', 'nonisolated(unsafe) private weak var', sc)
+                          new_sc = re.sub(r'(?<!nonisolated\(unsafe\)\s)internal weak (let|var)', 'nonisolated(unsafe) internal weak var', new_sc)
+                          if new_sc != sc:
                               os.chmod(p, 0o666)
-                              sc = sc.replace('weak let ', 'weak var ')
                               with open(p, 'w') as fp:
-                                  fp.write(sc)
+                                  fp.write(new_sc)
                               count_swift += 1
-                              print('Successfully patched weak let in:', p)
+                              print('Successfully patched weak property in:', p)
                       except Exception as e:
                           print('Error patching swift file', p, e)
           print(f'Done post-pod patching. Patched {count_pkg} Package.swift, {count_sh} build-xcframework.sh, {count_swift} swift files.')
