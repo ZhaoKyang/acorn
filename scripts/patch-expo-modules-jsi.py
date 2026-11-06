@@ -170,6 +170,60 @@ inline void appendPropNameId(HostObjectCallbacks::PropNameIds &vector, facebook:
                 count['swift'] += 1
                 print('Patched PlaybackCoordinator.swift:', p)
 
+        # 10. GalleryToolbar.swift (react-native-jet-gallery)
+        elif f == 'GalleryToolbar.swift':
+            with open(p, 'r') as fp:
+                c = fp.read()
+            old_glass = '''  private func glass(_ content: UIView) -> UIView {
+    guard #available(iOS 26, *) else { return content }
+
+    let effect = UIGlassEffect(style: .regular)
+    effect.isInteractive = true
+
+    let effectView = UIVisualEffectView(effect: effect)
+    effectView.cornerConfiguration = .capsule()
+    effectView.translatesAutoresizingMaskIntoConstraints = false
+    effectView.contentView.addSubview(content)
+
+    NSLayoutConstraint.activate([
+      content.topAnchor.constraint(equalTo: effectView.contentView.topAnchor),
+      content.bottomAnchor.constraint(equalTo: effectView.contentView.bottomAnchor),
+      content.leadingAnchor.constraint(equalTo: effectView.contentView.leadingAnchor),
+      content.trailingAnchor.constraint(equalTo: effectView.contentView.trailingAnchor),
+    ])
+
+    return effectView
+  }'''
+            new_glass = '''  private func glass(_ content: UIView) -> UIView {
+    return content
+  }'''
+            if old_glass in c:
+                new_c = c.replace(old_glass, new_glass)
+                os.chmod(p, 0o666)
+                with open(p, 'w') as fp:
+                    fp.write(new_c)
+                count['swift'] += 1
+                print('Patched GalleryToolbar.swift:', p)
+
+        # 11. GalleryViewController.swift (react-native-jet-gallery)
+        elif f == 'GalleryViewController.swift':
+            with open(p, 'r') as fp:
+                c = fp.read()
+            old_guide = '''    let topGuide: UILayoutGuide
+    if #available(iOS 26, *) {
+      topGuide = view.layoutGuide(for: .safeArea(cornerAdaptation: .vertical))
+    } else {
+      topGuide = view.safeAreaLayoutGuide
+    }'''
+            new_guide = '    let topGuide: UILayoutGuide = view.safeAreaLayoutGuide'
+            if old_guide in c:
+                new_c = c.replace(old_guide, new_guide)
+                os.chmod(p, 0o666)
+                with open(p, 'w') as fp:
+                    fp.write(new_c)
+                count['swift'] += 1
+                print('Patched GalleryViewController.swift:', p)
+
     except Exception as e:
         print('Error patching', p, e)
 
@@ -182,7 +236,8 @@ def patch_expo_modules_jsi(search_root):
         'Package.swift', 'build-xcframework.sh', 'Task+immediate.swift',
         'JavaScriptRuntime.swift', 'RetainedSwiftPointer.h',
         'HostFunctionClosure.h', 'HostObjectCallbacks.h',
-        'PlaybackCoordinator.swift'
+        'PlaybackCoordinator.swift', 'GalleryToolbar.swift',
+        'GalleryViewController.swift'
     }
 
     for root, dirs, files in os.walk(search_root, followlinks=True):
