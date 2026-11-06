@@ -190,6 +190,48 @@ jobs:
                   print('Applied regex patch to', path)
           "
 
+      - name: Patch all Package.swift and build-xcframework scripts (post pod-install)
+        run: |
+          chmod -R u+w apps/mobile/ios/Pods || true
+          python3 -c "
+          import os, re
+          count = 0
+          for root, dirs, files in os.walk('/Users/runner/work/acorn', followlinks=True):
+              for f in files:
+                  if f == 'Package.swift':
+                      p = os.path.join(root, f)
+                      try:
+                          os.chmod(p, 0o666)
+                          with open(p, 'r') as fp:
+                              c = fp.read()
+                          if 'swift-tools-version' in c:
+                              new_c = re.sub(r'// swift-tools-version:\s*6\.\d+', '// swift-tools-version: 6.0', c)
+                              new_c = re.sub(r'(\.enableUpcomingFeature\(\"(?:NonisolatedNonsendingByDefault|InferIsolatedConformances)\"\),?)', r'// \1', new_c)
+                              if new_c != c:
+                                  with open(p, 'w') as fp:
+                                      fp.write(new_c)
+                                  count += 1
+                                  print('Successfully patched Package.swift:', p)
+                      except Exception as e:
+                          print('Error patching', p, e)
+                  elif f == 'build-xcframework.sh':
+                      p = os.path.join(root, f)
+                      try:
+                          os.chmod(p, 0o777)
+                          with open(p, 'r') as fp:
+                              c = fp.read()
+                          if '-disableAutomaticPackageResolution' in c:
+                              new_c = c.replace('-disableAutomaticPackageResolution \\\n', '').replace('-disableAutomaticPackageResolution', '')
+                              with open(p, 'w') as fp:
+                                  fp.write(new_c)
+                              print('Successfully patched build-xcframework.sh:', p)
+                      except Exception as e:
+                          print('Error patching', p, e)
+          print(f'Done post-pod patching. Patched {count} Package.swift files.')
+          "
+          echo "=== Verified all Package.swift swift-tools-versions ==="
+          find /Users/runner/work/acorn -name "Package.swift" -exec head -n 1 {} +
+
       - name: Build and Archive (Unsigned for Device)
         run: |
           cd apps/mobile/ios
