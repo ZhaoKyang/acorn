@@ -456,7 +456,22 @@ private func makePreferredStrategy(_ preferredStrategy: String) -> TranslationSe
     except Exception as e:
         print('Error patching', p, e)
 
+def ensure_app_icon(repo_root):
+    src_iconset = os.path.join(repo_root, 'apps', 'mobile', 'assets', 'AppIcon.appiconset')
+    target_xcassets = os.path.join(repo_root, 'apps', 'mobile', 'ios', 'Acorn', 'Images.xcassets')
+    if os.path.isdir(target_xcassets) and os.path.isdir(src_iconset):
+        dest_iconset = os.path.join(target_xcassets, 'AppIcon.appiconset')
+        os.makedirs(dest_iconset, exist_ok=True)
+        import shutil
+        for item in os.listdir(src_iconset):
+            s = os.path.join(src_iconset, item)
+            d = os.path.join(dest_iconset, item)
+            if os.path.isfile(s):
+                shutil.copy2(s, d)
+        print('Ensured AppIcon.appiconset in:', dest_iconset)
+
 def patch_expo_modules_jsi(search_root):
+    ensure_app_icon(search_root)
     count = {'pkg': 0, 'sh': 0, 'swift': 0, 'h': 0, 'swiftinterface': 0, 'tar': 0}
     if not os.path.exists(search_root):
         return count

@@ -87,6 +87,13 @@ jobs:
           cd apps/mobile
           bunx expo prebuild --platform ios --clean --no-install
 
+      - name: Ensure AppIcon set in asset catalog
+        run: |
+          mkdir -p apps/mobile/ios/Acorn/Images.xcassets/AppIcon.appiconset
+          cp -r apps/mobile/assets/AppIcon.appiconset/* apps/mobile/ios/Acorn/Images.xcassets/AppIcon.appiconset/
+          echo "=== Verified AppIcon.appiconset ==="
+          ls -la apps/mobile/ios/Acorn/Images.xcassets/AppIcon.appiconset/
+
       - name: Patch Podfile for Xcode 16 compatibility
         run: |
           python3 -c "
