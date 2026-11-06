@@ -284,6 +284,44 @@ inline void appendPropNameId(HostObjectCallbacks::PropNameIds &vector, facebook:
             except Exception as e:
                 print('Error patching tarball', p, e)
 
+        # 14. TranslationHelpers.swift (expo-translate-text / iOS 18 compatibility)
+        elif f == 'TranslationHelpers.swift':
+            with open(p, 'r') as fp:
+                c = fp.read()
+            old_code = '''  if #available(iOS 26.4, *), let preferredStrategy {
+    return TranslationSession.Configuration(
+      source: source,
+      target: target,
+      preferredStrategy: makePreferredStrategy(preferredStrategy)
+    )
+  }
+
+  return TranslationSession.Configuration(source: source, target: target)'''
+            new_code = '  return TranslationSession.Configuration(source: source, target: target)'
+
+            old_func = '''@available(iOS 26.4, *)
+private func makePreferredStrategy(_ preferredStrategy: String) -> TranslationSession.Strategy {
+  switch preferredStrategy {
+  case "highFidelity":
+    return .highFidelity
+  default:
+    return .lowLatency
+  }
+}'''
+            changed = False
+            if old_code in c:
+                c = c.replace(old_code, new_code)
+                changed = True
+            if old_func in c:
+                c = c.replace(old_func, '')
+                changed = True
+            if changed:
+                os.chmod(p, 0o666)
+                with open(p, 'w') as fp:
+                    fp.write(c)
+                count['swift'] += 1
+                print('Patched TranslationHelpers.swift:', p)
+
     except Exception as e:
         print('Error patching', p, e)
 
@@ -297,7 +335,7 @@ def patch_expo_modules_jsi(search_root):
         'JavaScriptRuntime.swift', 'RetainedSwiftPointer.h',
         'HostFunctionClosure.h', 'HostObjectCallbacks.h',
         'PlaybackCoordinator.swift', 'GalleryToolbar.swift',
-        'GalleryViewController.swift'
+        'GalleryViewController.swift', 'TranslationHelpers.swift'
     }
 
     for root, dirs, files in os.walk(search_root, followlinks=True):
