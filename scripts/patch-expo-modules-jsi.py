@@ -409,6 +409,50 @@ private func makePreferredStrategy(_ preferredStrategy: String) -> TranslationSe
                 count['swift'] += 1
                 print('Patched RouterToolbarModule.swift:', p)
 
+        # 18. MediaHandler.swift (expo-image-picker / iOS 18 compatibility)
+        elif f == 'MediaHandler.swift':
+            with open(p, 'r') as fp:
+                c = fp.read()
+            old_asset = '''  private func getMimeType(from asset: PHAsset?, fileExtension: String) -> String? {
+    let utType: UTType? = if #available(iOS 26.0, *) {
+      asset?.contentType ?? UTType(filenameExtension: fileExtension)
+    } else {
+      UTType(filenameExtension: fileExtension)
+    }
+    return utType?.preferredMIMEType
+  }'''
+            new_asset = '''  private func getMimeType(from asset: PHAsset?, fileExtension: String) -> String? {
+    let utType: UTType? = UTType(filenameExtension: fileExtension)
+    return utType?.preferredMIMEType
+  }'''
+
+            old_resource = '''  private func getMimeType(from resource: PHAssetResource, fileExtension: String) -> String? {
+    let utType: UTType? = if #available(iOS 26.0, *) {
+      resource.contentType
+    } else {
+      UTType(resource.uniformTypeIdentifier) ?? UTType(filenameExtension: fileExtension)
+    }
+    return utType?.preferredMIMEType
+  }'''
+            new_resource = '''  private func getMimeType(from resource: PHAssetResource, fileExtension: String) -> String? {
+    let utType: UTType? = UTType(resource.uniformTypeIdentifier) ?? UTType(filenameExtension: fileExtension)
+    return utType?.preferredMIMEType
+  }'''
+
+            changed = False
+            if old_asset in c:
+                c = c.replace(old_asset, new_asset)
+                changed = True
+            if old_resource in c:
+                c = c.replace(old_resource, new_resource)
+                changed = True
+            if changed:
+                os.chmod(p, 0o666)
+                with open(p, 'w') as fp:
+                    fp.write(c)
+                count['swift'] += 1
+                print('Patched MediaHandler.swift:', p)
+
     except Exception as e:
         print('Error patching', p, e)
 
@@ -424,7 +468,7 @@ def patch_expo_modules_jsi(search_root):
         'PlaybackCoordinator.swift', 'GalleryToolbar.swift',
         'GalleryViewController.swift', 'TranslationHelpers.swift',
         'RouterToolbarHostView.swift', 'RouterToolbarItemView.swift',
-        'RouterToolbarModule.swift'
+        'RouterToolbarModule.swift', 'MediaHandler.swift'
     }
 
     for root, dirs, files in os.walk(search_root, followlinks=True):
